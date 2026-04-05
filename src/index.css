@@ -184,6 +184,7 @@ input {
 
 .day-card {
   min-height: 110px;
+  height: 110px;
   border-radius: 18px;
   border: 1px solid #e2e8f0;
   background: #fff;
@@ -192,6 +193,9 @@ input {
   text-align: left;
   cursor: pointer;
   min-width: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
 }
 
 .day-card--muted {
@@ -207,16 +211,45 @@ input {
 .day-card__top {
   display: flex;
   justify-content: space-between;
+  align-items: flex-start;
   margin-bottom: 8px;
+  font-size: 14px;
+  flex-shrink: 0;
 }
 
 .day-card__content {
   min-width: 0;
+  flex: 1;
+  overflow: hidden;
+}
+
+.day-chip {
+  font-size: 12px;
+  background: #f1f5f9;
+  padding: 4px 8px;
+  border-radius: 10px;
+  margin-bottom: 4px;
+  color: #334155;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .day-card__more {
   font-size: 12px;
   color: #64748b;
+}
+
+.day-card__mobile-summary {
+  font-size: 11px;
+  color: #475569;
+  background: #f1f5f9;
+  border-radius: 8px;
+  padding: 4px 6px;
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .badge {
@@ -479,6 +512,112 @@ body {
 
   div[style*="fontSize: 12px"] {
     font-size: 11px !important;
+  }
+}
+
+@media (max-width: 640px) {
+  .page {
+    padding: 10px;
+  }
+
+  .layout {
+    grid-template-columns: 1fr !important;
+    gap: 12px;
+  }
+
+  .card,
+  .auth-card {
+    padding: 14px;
+    border-radius: 18px;
+  }
+
+  .title {
+    font-size: 21px;
+  }
+
+  .section-title {
+    font-size: 18px;
+  }
+
+  .week-grid {
+    gap: 4px;
+    margin-bottom: 6px;
+  }
+
+  .day-grid {
+    gap: 4px;
+  }
+
+  .week-day {
+    font-size: 11px;
+    padding: 4px 0;
+  }
+
+  .day-card {
+    height: 64px;
+    min-height: 64px;
+    padding: 6px;
+    border-radius: 12px;
+  }
+
+  .day-card__top {
+    margin-bottom: 4px;
+    font-size: 12px;
+  }
+
+  .badge {
+    padding: 1px 5px;
+    font-size: 10px;
+  }
+
+  .button-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+
+  .button-row .danger-button,
+  .button-row .button:last-child {
+    grid-column: span 2;
+  }
+
+  .button,
+  .danger-button,
+  .primary-button {
+    width: 100%;
+  }
+
+  .item-row {
+    grid-template-columns: 1fr;
+  }
+
+  .action-row {
+    justify-content: flex-start;
+  }
+}
+
+@media (max-width: 420px) {
+  .day-card {
+    height: 58px;
+    min-height: 58px;
+    padding: 5px;
+  }
+
+  .day-card__top {
+    font-size: 11px;
+  }
+
+  .day-card__mobile-summary {
+    font-size: 10px;
+    padding: 3px 5px;
+  }
+
+  .week-day {
+    font-size: 10px;
+  }
+
+  .title {
+    font-size: 19px;
   }
 }
 

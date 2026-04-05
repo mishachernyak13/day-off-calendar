@@ -61,6 +61,7 @@ function DayCard({ date, currentMonth, dayEntries, todayKey, onSelect }) {
   const dateKey = formatDateKey(date);
   const current = isSameMonth(date, currentMonth);
   const today = dateKey === todayKey;
+  const isMobile = typeof window !== "undefined" && window.innerWidth <= 640;
 
   return (
     <button
@@ -74,14 +75,26 @@ function DayCard({ date, currentMonth, dayEntries, todayKey, onSelect }) {
       </div>
 
       <div className="day-card__content">
-        {dayEntries.slice(0, 3).map((entry) => (
-          <div key={`${entry.id}-${dateKey}`} className="day-chip" title={entry.name}>
-            {entry.name}
+        {dayEntries.length === 0 ? null : isMobile ? (
+          <div className="day-card__mobile-summary">
+            {dayEntries.length === 1
+              ? "1 запис"
+              : dayEntries.length < 5
+              ? `${dayEntries.length} записи`
+              : `${dayEntries.length} записів`}
           </div>
-        ))}
+        ) : (
+          <>
+            {dayEntries.slice(0, 2).map((entry) => (
+              <div key={`${entry.id}-${dateKey}`} className="day-chip" title={entry.name}>
+                {entry.name}
+              </div>
+            ))}
 
-        {dayEntries.length > 3 && (
-          <div className="day-card__more">+ ще {dayEntries.length - 3}</div>
+            {dayEntries.length > 2 && (
+              <div className="day-card__more">+ ще {dayEntries.length - 2}</div>
+            )}
+          </>
         )}
       </div>
     </button>
