@@ -421,7 +421,7 @@ export default function DayOffCalendarApp() {
 
     setSaving(true);
     setErrorMessage("");
-
+ 
     const { error } = await supabase
       .from("day_off_entries")
       .delete()
