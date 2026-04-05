@@ -390,3 +390,144 @@ input {
     justify-content: flex-start;
   }
 }
+
+:root {
+  font-family: Inter, system-ui, Arial, sans-serif;
+  color: #0f172a;
+  background: #f8fafc;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  min-height: 100%;
+}
+
+body {
+  margin: 0;
+  background: #f8fafc;
+}
+
+.login {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-width: 320px;
+  margin: 100px auto;
+  padding: 20px;
+  background: white;
+  border-radius: 20px;
+}
+
+.login input {
+  padding: 10px;
+  border-radius: 10px;
+  border: 1px solid #ccc;
+}
+
+.login button {
+  padding: 10px;
+  border-radius: 10px;
+  background: black;
+  color: white;
+  cursor: pointer;
+}
+
+@media (max-width: 960px) {
+  body {
+    font-size: 14px;
+  }
+
+  div[style*="gridTemplateColumns"] {
+    grid-template-columns: 1fr !important;
+  }
+
+  div[style*="borderRadius: 24px"] {
+    padding: 16px !important;
+    border-radius: 18px !important;
+  }
+
+  h1 {
+    font-size: 22px !important;
+  }
+
+  h2 {
+    font-size: 18px !important;
+  }
+
+  button {
+    font-size: 13px !important;
+    padding: 8px 10px !important;
+  }
+
+  input {
+    font-size: 14px !important;
+  }
+
+  div[style*="repeat(7"] {
+    gap: 6px !important;
+  }
+
+  button[style*="minHeight"] {
+    min-height: 90px !important;
+    padding: 6px !important;
+  }
+
+  div[style*="fontSize: 12px"] {
+    font-size: 11px !important;
+  }
+}
+
+@media (max-width: 500px) {
+  body {
+    font-size: 13px;
+  }
+
+  h1 {
+    font-size: 20px !important;
+  }
+
+  h2 {
+    font-size: 16px !important;
+  }
+
+  button {
+    width: 100%;
+  }
+
+  div[style*="flexWrap"] {
+    display: grid !important;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px;
+  }
+
+  div[style*="flexWrap"] button:last-child {
+    grid-column: span 2;
+  }
+
+  button[style*="minHeight"] {
+    min-height: 75px !important;
+  }
+
+  div[style*="lineHeight"] {
+    font-size: 10px !important;
+  }
+}
+
+@media (max-width: 380px) {
+  h1 {
+    font-size: 18px !important;
+  }
+
+  button[style*="minHeight"] {
+    min-height: 70px !important;
+  }
+
+  div[style*="fontSize: 12px"] {
+    font-size: 9px !important;
+  }
+}
