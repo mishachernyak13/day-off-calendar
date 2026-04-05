@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
+import { supabase } from "./supabase";
 
 const monthNames = [
   "Січень",
@@ -16,14 +17,6 @@ const monthNames = [
 ];
 
 const weekDays = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Нд"];
-
-const initialEntries = [
-  { id: 1, name: "Анна", date: "2026-04-03" },
-  { id: 2, name: "Іван", date: "2026-04-08" },
-  { id: 3, name: "Оля", date: "2026-04-14" },
-];
-
-const STORAGE_KEY = "dayoff-calendar-entries";
 
 function formatDateKey(date) {
   const year = date.getFullYear();
@@ -117,6 +110,16 @@ const styles = {
     cursor: "pointer",
     fontSize: "14px",
   },
+  dangerButton: {
+    border: "none",
+    background: "#dc2626",
+    color: "white",
+    borderRadius: "14px",
+    padding: "10px 14px",
+    cursor: "pointer",
+    fontSize: "14px",
+    flexShrink: 0,
+  },
   weekGrid: {
     display: "grid",
     gridTemplateColumns: "repeat(7, minmax(0, 1fr))",
@@ -203,6 +206,20 @@ const styles = {
     wordBreak: "break-word",
     lineHeight: 1.3,
   },
+  loadingBox: {
+    background: "#eff6ff",
+    color: "#1d4ed8",
+    borderRadius: "16px",
+    padding: "12px 14px",
+    marginBottom: "16px",
+  },
+  errorBox: {
+    background: "#fef2f2",
+    color: "#b91c1c",
+    borderRadius: "16px",
+    padding: "12px 14px",
+    marginBottom: "16px",
+  },
 };
 
 function DayCard({ date, currentMonth, dayEntries, todayKey, onSelect }) {
@@ -252,26 +269,38 @@ function DayCard({ date, currentMonth, dayEntries, todayKey, onSelect }) {
 
 export default function DayOffCalendarApp() {
   const [currentMonth, setCurrentMonth] = useState(new Date());
-  const [entries, setEntries] = useState(() => {
-    try {
-      const saved = localStorage.getItem(STORAGE_KEY);
-      return saved ? JSON.parse(saved) : initialEntries;
-    } catch {
-      return initialEntries;
-    }
-  });
+  const [entries, setEntries] = useState([]);
   const [selectedDate, setSelectedDate] = useState(null);
   const [form, setForm] = useState({ name: "", date: "" });
   const [editingId, setEditingId] = useState(null);
   const [editingName, setEditingName] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [errorMessage, setErrorMessage] = useState("");
+
+  const loadEntries = async () => {
+    setLoading(true);
+    setErrorMessage("");
+
+    const { data, error } = await supabase
+      .from("day_off_entries")
+      .select("id, name, date, created_at")
+      .order("date", { ascending: true })
+      .order("created_at", { ascending: true });
+
+    if (error) {
+      setErrorMessage(error.message || "Не вдалося завантажити дані");
+      setEntries([]);
+    } else {
+      setEntries(data || []);
+    }
+
+    setLoading(false);
+  };
 
   useEffect(() => {
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(entries));
-    } catch {
-      // ignore storage write errors
-    }
-  }, [entries]);
+    loadEntries();
+  }, []);
 
   const calendarDays = useMemo(() => getCalendarDays(currentMonth), [currentMonth]);
 
@@ -298,7 +327,6 @@ export default function DayOffCalendarApp() {
 
     entries.forEach((entry) => {
       const [year, month] = entry.date.split("-").map(Number);
-
       if (year === currentYear && month - 1 === currentMonthIndex) {
         totalBookedDays += 1;
         people.add(entry.name);
@@ -308,27 +336,49 @@ export default function DayOffCalendarApp() {
     return { peopleCount: people.size, totalBookedDays };
   }, [entries, currentMonth]);
 
-  const handleAddEntry = () => {
-    if (!form.name || !form.date) return;
+  const handleAddEntry = async () => {
+    if (!form.name.trim() || !form.date) return;
 
-    setEntries((prev) => [
-      ...prev,
+    setSaving(true);
+    setErrorMessage("");
+
+    const { error } = await supabase.from("day_off_entries").insert([
       {
-        id: Date.now(),
         name: form.name.trim(),
         date: form.date,
       },
     ]);
 
+    if (error) {
+      setErrorMessage(error.message || "Не вдалося додати запис");
+      setSaving(false);
+      return;
+    }
+
     setForm({ name: "", date: "" });
+    await loadEntries();
+    setSaving(false);
   };
 
-  const handleDeleteEntry = (id) => {
-    setEntries((prev) => prev.filter((entry) => entry.id !== id));
+  const handleDeleteEntry = async (id) => {
+    setSaving(true);
+    setErrorMessage("");
+
+    const { error } = await supabase.from("day_off_entries").delete().eq("id", id);
+
+    if (error) {
+      setErrorMessage(error.message || "Не вдалося видалити запис");
+      setSaving(false);
+      return;
+    }
+
     if (editingId === id) {
       setEditingId(null);
       setEditingName("");
     }
+
+    await loadEntries();
+    setSaving(false);
   };
 
   const handleStartEdit = (entry) => {
@@ -336,18 +386,28 @@ export default function DayOffCalendarApp() {
     setEditingName(entry.name);
   };
 
-  const handleSaveEdit = (id) => {
+  const handleSaveEdit = async (id) => {
     const trimmedName = editingName.trim();
     if (!trimmedName) return;
 
-    setEntries((prev) =>
-      prev.map((entry) =>
-        entry.id === id ? { ...entry, name: trimmedName } : entry
-      )
-    );
+    setSaving(true);
+    setErrorMessage("");
+
+    const { error } = await supabase
+      .from("day_off_entries")
+      .update({ name: trimmedName })
+      .eq("id", id);
+
+    if (error) {
+      setErrorMessage(error.message || "Не вдалося оновити запис");
+      setSaving(false);
+      return;
+    }
 
     setEditingId(null);
     setEditingName("");
+    await loadEntries();
+    setSaving(false);
   };
 
   const handleCancelEdit = () => {
@@ -355,15 +415,29 @@ export default function DayOffCalendarApp() {
     setEditingName("");
   };
 
-  const handleResetAll = () => {
-    const confirmed = window.confirm(
-      "Очистити всі записи? Це видалить збережені дані з браузера."
-    );
+  const handleDeleteAll = async () => {
+    const confirmed = window.confirm("Видалити всі записи з бази даних?");
     if (!confirmed) return;
-    setEntries([]);
+
+    setSaving(true);
+    setErrorMessage("");
+
+    const { error } = await supabase
+      .from("day_off_entries")
+      .delete()
+      .not("id", "is", null);
+
+    if (error) {
+      setErrorMessage(error.message || "Не вдалося очистити записи");
+      setSaving(false);
+      return;
+    }
+
     setSelectedDate(null);
     setEditingId(null);
     setEditingName("");
+    await loadEntries();
+    setSaving(false);
   };
 
   const isMobile = typeof window !== "undefined" && window.innerWidth < 960;
@@ -379,7 +453,7 @@ export default function DayOffCalendarApp() {
         <div style={styles.card}>
           <div style={styles.headerRow}>
             <div>
-              <div style={styles.subtitle}>Календар day off</div>
+              <div style={styles.subtitle}>Календар day off · Supabase sync</div>
               <h1 style={styles.title}>
                 {monthNames[currentMonth.getMonth()]} {currentMonth.getFullYear()}
               </h1>
@@ -406,11 +480,14 @@ export default function DayOffCalendarApp() {
               >
                 Вперед →
               </button>
-              <button style={styles.button} onClick={handleResetAll}>
+              <button style={styles.dangerButton} onClick={handleDeleteAll} disabled={saving}>
                 Очистити все
               </button>
             </div>
           </div>
+
+          {loading && <div style={styles.loadingBox}>Завантаження даних із Supabase...</div>}
+          {errorMessage && <div style={styles.errorBox}>{errorMessage}</div>}
 
           <div style={styles.card}>
             <div style={styles.field}>
@@ -419,7 +496,7 @@ export default function DayOffCalendarApp() {
                 style={styles.input}
                 value={form.name}
                 onChange={(e) => setForm((prev) => ({ ...prev, name: e.target.value }))}
-                placeholder="Наприклад, Марина"
+                placeholder="Наприклад, Марина Шевченко"
               />
             </div>
 
@@ -433,8 +510,8 @@ export default function DayOffCalendarApp() {
               />
             </div>
 
-            <button style={styles.primaryButton} onClick={handleAddEntry}>
-              Додати day off
+            <button style={styles.primaryButton} onClick={handleAddEntry} disabled={saving}>
+              {saving ? "Збереження..." : "Додати day off"}
             </button>
           </div>
 
@@ -513,19 +590,19 @@ export default function DayOffCalendarApp() {
                     <div style={styles.actionRow}>
                       {editingId === entry.id ? (
                         <>
-                          <button style={styles.button} onClick={() => handleSaveEdit(entry.id)}>
+                          <button style={styles.button} onClick={() => handleSaveEdit(entry.id)} disabled={saving}>
                             Зберегти
                           </button>
-                          <button style={styles.button} onClick={handleCancelEdit}>
+                          <button style={styles.button} onClick={handleCancelEdit} disabled={saving}>
                             Скасувати
                           </button>
                         </>
                       ) : (
-                        <button style={styles.button} onClick={() => handleStartEdit(entry)}>
+                        <button style={styles.button} onClick={() => handleStartEdit(entry)} disabled={saving}>
                           Редагувати
                         </button>
                       )}
-                      <button style={styles.button} onClick={() => handleDeleteEntry(entry.id)}>
+                      <button style={styles.button} onClick={() => handleDeleteEntry(entry.id)} disabled={saving}>
                         Видалити
                       </button>
                     </div>
@@ -542,7 +619,7 @@ export default function DayOffCalendarApp() {
           <div style={styles.card}>
             <h2 style={{ marginTop: 0 }}>Усі записи</h2>
             <div style={{ ...styles.smallMuted, marginBottom: "12px" }}>
-              Дані автоматично зберігаються в браузері й залишаються після оновлення сторінки.
+              Дані зберігаються в Supabase і будуть однаковими на всіх твоїх пристроях.
             </div>
 
             {entries
@@ -571,19 +648,19 @@ export default function DayOffCalendarApp() {
                   <div style={styles.actionRow}>
                     {editingId === entry.id ? (
                       <>
-                        <button style={styles.button} onClick={() => handleSaveEdit(entry.id)}>
+                        <button style={styles.button} onClick={() => handleSaveEdit(entry.id)} disabled={saving}>
                           Зберегти
                         </button>
-                        <button style={styles.button} onClick={handleCancelEdit}>
+                        <button style={styles.button} onClick={handleCancelEdit} disabled={saving}>
                           Скасувати
                         </button>
                       </>
                     ) : (
-                      <button style={styles.button} onClick={() => handleStartEdit(entry)}>
+                      <button style={styles.button} onClick={() => handleStartEdit(entry)} disabled={saving}>
                         Редагувати
                       </button>
                     )}
-                    <button style={styles.button} onClick={() => handleDeleteEntry(entry.id)}>
+                    <button style={styles.button} onClick={() => handleDeleteEntry(entry.id)} disabled={saving}>
                       Видалити
                     </button>
                   </div>
