@@ -17,6 +17,7 @@ const monthNames = [
 ];
 
 const weekDays = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Нд"];
+const MAX_PEOPLE_PER_DAY = 2;
 
 function formatDateKey(date) {
   const year = date.getFullYear();
@@ -58,15 +59,35 @@ function getCalendarDays(currentMonth) {
 }
 
 function getInitials(fullName) {
-  const parts = fullName
-    .trim()
-    .split(/\s+/)
-    .filter(Boolean);
+  const parts = fullName.trim().split(/\s+/).filter(Boolean);
 
   if (parts.length === 0) return "";
   if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
 
   return `${parts[0][0] || ""}${parts[1][0] || ""}`.toUpperCase();
+}
+
+function normalizeName(name) {
+  return name.trim().replace(/\s+/g, " ").toLowerCase();
+}
+
+function getConflictMessage(entries, name, date, excludeId = null) {
+  const normalizedName = normalizeName(name);
+  const sameDateEntries = entries.filter((entry) => entry.date === date && entry.id !== excludeId);
+
+  const duplicatePerson = sameDateEntries.some(
+    (entry) => normalizeName(entry.name) === normalizedName
+  );
+
+  if (duplicatePerson) {
+    return "Ця людина вже має day off на цю дату.";
+  }
+
+  if (sameDateEntries.length >= MAX_PEOPLE_PER_DAY) {
+    return `На цю дату вже є максимум ${MAX_PEOPLE_PER_DAY} людини.`;
+  }
+
+  return "";
 }
 
 function DayCard({ date, currentMonth, dayEntries, todayKey, onSelect }) {
@@ -128,10 +149,18 @@ export default function App() {
   const [selectedDate, setSelectedDate] = useState(null);
   const [form, setForm] = useState({ name: "", date: "" });
   const [editingId, setEditingId] = useState(null);
-  const [editingName, setEditingName] = useState("");
+  const [editingForm, setEditingForm] = useState({ name: "", date: "" });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
+  const [successMessage, setSuccessMessage] = useState("");
+
+  const clearFlashMessage = () => {
+    window.clearTimeout(window.__dayoffFlashTimer);
+    window.__dayoffFlashTimer = window.setTimeout(() => {
+      setSuccessMessage("");
+    }, 2200);
+  };
 
   useEffect(() => {
     let active = true;
@@ -151,6 +180,7 @@ export default function App() {
     return () => {
       active = false;
       subscription.unsubscribe();
+      window.clearTimeout(window.__dayoffFlashTimer);
     };
   }, []);
 
@@ -182,6 +212,29 @@ export default function App() {
 
   useEffect(() => {
     loadEntries();
+  }, [session]);
+
+  useEffect(() => {
+    if (!session) return undefined;
+
+    const channel = supabase
+      .channel("day-off-realtime")
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "day_off_entries",
+        },
+        () => {
+          loadEntries();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, [session]);
 
   const calendarDays = useMemo(() => getCalendarDays(currentMonth), [currentMonth]);
@@ -240,22 +293,30 @@ export default function App() {
 
   const handleLogout = async () => {
     setErrorMessage("");
+    setSuccessMessage("");
     await supabase.auth.signOut();
     setEntries([]);
     setSelectedDate(null);
     setEditingId(null);
-    setEditingName("");
+    setEditingForm({ name: "", date: "" });
   };
 
   const handleAddEntry = async () => {
-    if (!form.name.trim() || !form.date) return;
+    const trimmedName = form.name.trim();
+    if (!trimmedName || !form.date) return;
+
+    const conflictMessage = getConflictMessage(entries, trimmedName, form.date);
+    if (conflictMessage) {
+      setErrorMessage(conflictMessage);
+      return;
+    }
 
     setSaving(true);
     setErrorMessage("");
 
     const { error } = await supabase.from("day_off_entries").insert([
       {
-        name: form.name.trim(),
+        name: trimmedName,
         date: form.date,
       },
     ]);
@@ -267,7 +328,8 @@ export default function App() {
     }
 
     setForm({ name: "", date: "" });
-    await loadEntries();
+    setSuccessMessage("Запис додано");
+    clearFlashMessage();
     setSaving(false);
   };
 
@@ -285,28 +347,36 @@ export default function App() {
 
     if (editingId === id) {
       setEditingId(null);
-      setEditingName("");
+      setEditingForm({ name: "", date: "" });
     }
 
-    await loadEntries();
+    setSuccessMessage("Запис видалено");
+    clearFlashMessage();
     setSaving(false);
   };
 
   const handleStartEdit = (entry) => {
     setEditingId(entry.id);
-    setEditingName(entry.name);
+    setEditingForm({ name: entry.name, date: entry.date });
+    setErrorMessage("");
   };
 
   const handleSaveEdit = async (id) => {
-    const trimmedName = editingName.trim();
-    if (!trimmedName) return;
+    const trimmedName = editingForm.name.trim();
+    if (!trimmedName || !editingForm.date) return;
+
+    const conflictMessage = getConflictMessage(entries, trimmedName, editingForm.date, id);
+    if (conflictMessage) {
+      setErrorMessage(conflictMessage);
+      return;
+    }
 
     setSaving(true);
     setErrorMessage("");
 
     const { error } = await supabase
       .from("day_off_entries")
-      .update({ name: trimmedName })
+      .update({ name: trimmedName, date: editingForm.date })
       .eq("id", id);
 
     if (error) {
@@ -316,14 +386,15 @@ export default function App() {
     }
 
     setEditingId(null);
-    setEditingName("");
-    await loadEntries();
+    setEditingForm({ name: "", date: "" });
+    setSuccessMessage("Запис оновлено");
+    clearFlashMessage();
     setSaving(false);
   };
 
   const handleCancelEdit = () => {
     setEditingId(null);
-    setEditingName("");
+    setEditingForm({ name: "", date: "" });
   };
 
   const handleDeleteAll = async () => {
@@ -343,8 +414,9 @@ export default function App() {
 
     setSelectedDate(null);
     setEditingId(null);
-    setEditingName("");
-    await loadEntries();
+    setEditingForm({ name: "", date: "" });
+    setSuccessMessage("Усі записи видалено");
+    clearFlashMessage();
     setSaving(false);
   };
 
@@ -447,6 +519,7 @@ export default function App() {
 
           {loading && <div className="loading-box">Завантаження даних із Supabase...</div>}
           {errorMessage && <div className="error-box">{errorMessage}</div>}
+          {successMessage && <div className="success-box">{successMessage}</div>}
 
           <div className="card card--inner">
             <div className="field">
@@ -468,6 +541,8 @@ export default function App() {
                 onChange={(e) => setForm((prev) => ({ ...prev, date: e.target.value }))}
               />
             </div>
+
+            <div className="small-muted mb-12">Ліміт: максимум {MAX_PEOPLE_PER_DAY} людини на день.</div>
 
             <button className="primary-button" type="button" onClick={handleAddEntry} disabled={saving}>
               {saving ? "Збереження..." : "Додати day off"}
@@ -534,11 +609,21 @@ export default function App() {
                         <>
                           <input
                             className="input"
-                            value={editingName}
-                            onChange={(e) => setEditingName(e.target.value)}
+                            value={editingForm.name}
+                            onChange={(e) =>
+                              setEditingForm((prev) => ({ ...prev, name: e.target.value }))
+                            }
                             placeholder="Нове ім'я"
                           />
-                          <div className="small-muted mt-8">{entry.date}</div>
+                          <div className="space-12" />
+                          <input
+                            className="input"
+                            type="date"
+                            value={editingForm.date}
+                            onChange={(e) =>
+                              setEditingForm((prev) => ({ ...prev, date: e.target.value }))
+                            }
+                          />
                         </>
                       ) : (
                         <>
@@ -603,7 +688,7 @@ export default function App() {
           <div className="card">
             <h2 className="section-title">Усі записи</h2>
             <div className="small-muted mb-12">
-              Дані зберігаються в Supabase і доступні тільки після входу.
+              Дані зберігаються в Supabase, оновлюються в realtime і доступні тільки після входу.
             </div>
 
             {entries
@@ -616,11 +701,21 @@ export default function App() {
                       <>
                         <input
                           className="input"
-                          value={editingName}
-                          onChange={(e) => setEditingName(e.target.value)}
+                          value={editingForm.name}
+                          onChange={(e) =>
+                            setEditingForm((prev) => ({ ...prev, name: e.target.value }))
+                          }
                           placeholder="Нове ім'я"
                         />
-                        <div className="small-muted mt-8">{entry.date}</div>
+                        <div className="space-12" />
+                        <input
+                          className="input"
+                          type="date"
+                          value={editingForm.date}
+                          onChange={(e) =>
+                            setEditingForm((prev) => ({ ...prev, date: e.target.value }))
+                          }
+                        />
                       </>
                     ) : (
                       <>
