@@ -383,6 +383,15 @@ input {
   margin-bottom: 16px;
 }
 
+.success-box {
+  background: rgba(22, 163, 74, 0.14);
+  color: #86efac;
+  border: 1px solid rgba(34, 197, 94, 0.22);
+  border-radius: 16px;
+  padding: 12px 14px;
+  margin-bottom: 16px;
+}
+
 .auth-shell {
   min-height: 100vh;
   display: grid;
@@ -443,13 +452,107 @@ input {
   margin-top: 8px;
 }
 
-.success-box {
-  background: rgba(22, 163, 74, 0.14);
-  color: #86efac;
-  border: 1px solid rgba(34, 197, 94, 0.22);
-  border-radius: 16px;
-  padding: 12px 14px;
-  margin-bottom: 16px;
+/* compact lists */
+
+.compact-list-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.compact-title {
+  margin-bottom: 4px;
+}
+
+.compact-subtitle {
+  font-size: 12px;
+}
+
+.compact-count {
+  white-space: nowrap;
+  font-size: 12px;
+  padding-top: 4px;
+}
+
+.compact-list {
+  display: grid;
+  gap: 6px;
+}
+
+.compact-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border: 1px solid #2f3c4f;
+  background: #18212f;
+  border-radius: 12px;
+  min-width: 0;
+}
+
+.compact-main {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+}
+
+.compact-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: #f3f4f6;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.compact-date {
+  font-size: 12px;
+  color: #9ca3af;
+  white-space: nowrap;
+}
+
+.compact-actions {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  min-width: 0;
+}
+
+.compact-button {
+  min-height: 30px;
+  padding: 5px 8px;
+  font-size: 12px;
+  border-radius: 10px;
+}
+
+.compact-button--danger {
+  border-color: #7f1d1d;
+  background: #3a1b1b;
+  color: #fecaca;
+}
+
+.compact-button--danger:hover {
+  background: #4a1f1f;
+}
+
+.compact-edit-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  width: 100%;
+}
+
+.compact-input {
+  min-height: 34px;
+  padding: 6px 10px;
+  font-size: 13px;
 }
 
 @media (max-width: 959px) {
@@ -556,6 +659,19 @@ input {
   .auth-title {
     font-size: 28px;
   }
+
+  .compact-row {
+    grid-template-columns: 1fr;
+    align-items: stretch;
+  }
+
+  .compact-main {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .compact-actions {
+    justify-content: flex-start;
+  }
 }
 
 @media (max-width: 640px) {
@@ -579,18 +695,14 @@ input {
 
   .button-row {
     display: grid;
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: 1fr;
     gap: 8px;
+    width: 100%;
   }
 
+  .button-row .button,
   .button-row .danger-button,
-  .button-row .button:last-child {
-    grid-column: span 2;
-  }
-
-  .button,
-  .danger-button,
-  .primary-button {
+  .button-row .primary-button {
     width: 100%;
   }
 
@@ -661,6 +773,56 @@ input {
   .auth-title {
     font-size: 24px;
   }
+
+  .compact-list-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 6px;
+  }
+
+  .compact-count {
+    padding-top: 0;
+  }
+
+  .compact-row {
+    padding: 8px;
+    gap: 8px;
+  }
+
+  .compact-main {
+    grid-template-columns: 1fr;
+    gap: 3px;
+  }
+
+  .compact-name {
+    font-size: 12px;
+    white-space: normal;
+    overflow: visible;
+    text-overflow: unset;
+    line-height: 1.25;
+  }
+
+  .compact-date {
+    font-size: 11px;
+  }
+
+  .compact-actions {
+    width: 100%;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 6px;
+  }
+
+  .compact-button {
+    width: 100%;
+    min-height: 30px;
+    padding: 5px 6px;
+    font-size: 11px;
+  }
+
+  .compact-edit-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 @media (max-width: 420px) {
@@ -672,15 +834,6 @@ input {
   .auth-card {
     padding: 12px;
     border-radius: 16px;
-  }
-
-  .button-row {
-    grid-template-columns: 1fr;
-  }
-
-  .button-row .danger-button,
-  .button-row .button:last-child {
-    grid-column: span 1;
   }
 
   .title {
@@ -720,5 +873,23 @@ input {
     font-size: 7px;
     line-height: 16px;
     border-radius: 5px;
+  }
+
+  .compact-row {
+    padding: 7px;
+  }
+
+  .compact-actions {
+    grid-template-columns: 1fr;
+  }
+
+  .compact-button {
+    min-height: 28px;
+    font-size: 10px;
+    padding: 4px 6px;
+  }
+
+  .compact-date {
+    font-size: 10px;
   }
 }

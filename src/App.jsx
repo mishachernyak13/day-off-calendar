@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "./supabase";
 
 const monthNames = [
@@ -16,6 +16,22 @@ const monthNames = [
   "Грудень",
 ];
 
+const monthNamesGenitive = [
+  "січня",
+  "лютого",
+  "березня",
+  "квітня",
+  "травня",
+  "червня",
+  "липня",
+  "серпня",
+  "вересня",
+  "жовтня",
+  "листопада",
+  "грудня",
+];
+
+const weekDaysShort = ["нд", "пн", "вт", "ср", "чт", "пт", "сб"];
 const weekDays = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Нд"];
 const MAX_PEOPLE_PER_DAY = 2;
 
@@ -24,6 +40,16 @@ function formatDateKey(date) {
   const month = String(date.getMonth() + 1).padStart(2, "0");
   const day = String(date.getDate()).padStart(2, "0");
   return `${year}-${month}-${day}`;
+}
+
+function formatDisplayDate(dateString) {
+  const [year, month, day] = dateString.split("-").map(Number);
+  const date = new Date(year, month - 1, day);
+
+  const monthName = monthNamesGenitive[month - 1];
+  const weekDay = weekDaysShort[date.getDay()];
+
+  return `${day} ${monthName} (${weekDay})`;
 }
 
 function isSameMonth(date, currentMonth) {
@@ -154,10 +180,13 @@ export default function App() {
   const [saving, setSaving] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
+  const flashTimerRef = useRef(null);
 
   const clearFlashMessage = () => {
-    window.clearTimeout(window.__dayoffFlashTimer);
-    window.__dayoffFlashTimer = window.setTimeout(() => {
+    if (flashTimerRef.current) {
+      clearTimeout(flashTimerRef.current);
+    }
+    flashTimerRef.current = setTimeout(() => {
       setSuccessMessage("");
     }, 2200);
   };
@@ -180,7 +209,9 @@ export default function App() {
     return () => {
       active = false;
       subscription.unsubscribe();
-      window.clearTimeout(window.__dayoffFlashTimer);
+      if (flashTimerRef.current) {
+        clearTimeout(flashTimerRef.current);
+      }
     };
   }, []);
 
@@ -596,50 +627,170 @@ export default function App() {
           </div>
 
           <div className="card">
-            <h2 className="section-title">
-              {selectedDate ? `Записи на ${selectedDate}` : "Вибери день"}
-            </h2>
+            <div className="compact-list-header">
+              <div>
+                <h2 className="section-title compact-title">
+                  {selectedDate ? `Записи на ${formatDisplayDate(selectedDate)}` : "Вибери день"}
+                </h2>
+                <div className="small-muted compact-subtitle">
+                  {selectedDate
+                    ? `Людей на дату: ${selectedDayEntries.length}`
+                    : "Вибери день у календарі"}
+                </div>
+              </div>
+
+              {selectedDate && (
+                <div className="small-muted compact-count">
+                  Всього: {selectedDayEntries.length}
+                </div>
+              )}
+            </div>
 
             {selectedDate ? (
               selectedDayEntries.length > 0 ? (
-                selectedDayEntries.map((entry) => (
-                  <div key={entry.id} className="item-row">
-                    <div className="text-block">
+                <div className="compact-list">
+                  {selectedDayEntries
+                    .slice()
+                    .sort((a, b) => a.name.localeCompare(b.name))
+                    .map((entry) => (
+                      <div key={entry.id} className="compact-row">
+                        <div className="compact-main">
+                          {editingId === entry.id ? (
+                            <div className="compact-edit-grid">
+                              <input
+                                className="input compact-input"
+                                value={editingForm.name}
+                                onChange={(e) =>
+                                  setEditingForm((prev) => ({ ...prev, name: e.target.value }))
+                                }
+                                placeholder="Нове ім'я"
+                              />
+                              <input
+                                className="input compact-input"
+                                type="date"
+                                value={editingForm.date}
+                                onChange={(e) =>
+                                  setEditingForm((prev) => ({ ...prev, date: e.target.value }))
+                                }
+                              />
+                            </div>
+                          ) : (
+                            <>
+                              <div className="compact-name" title={entry.name}>
+                                {entry.name}
+                              </div>
+                              <div className="compact-date">
+                                {formatDisplayDate(entry.date)}
+                              </div>
+                            </>
+                          )}
+                        </div>
+
+                        <div className="compact-actions">
+                          {editingId === entry.id ? (
+                            <>
+                              <button
+                                className="button compact-button"
+                                type="button"
+                                onClick={() => handleSaveEdit(entry.id)}
+                                disabled={saving}
+                              >
+                                Зберегти
+                              </button>
+                              <button
+                                className="button compact-button"
+                                type="button"
+                                onClick={handleCancelEdit}
+                                disabled={saving}
+                              >
+                                Скасувати
+                              </button>
+                            </>
+                          ) : (
+                            <button
+                              className="button compact-button"
+                              type="button"
+                              onClick={() => handleStartEdit(entry)}
+                              disabled={saving}
+                            >
+                              Ред.
+                            </button>
+                          )}
+
+                          <button
+                            className="button compact-button compact-button--danger"
+                            type="button"
+                            onClick={() => handleDeleteEntry(entry.id)}
+                            disabled={saving}
+                          >
+                            Вид.
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                </div>
+              ) : (
+                <div className="stat-box">На цю дату ще немає записів.</div>
+              )
+            ) : (
+              <div className="stat-box">Клікни на дату в календарі, щоб побачити записи.</div>
+            )}
+          </div>
+
+          <div className="card">
+            <div className="compact-list-header">
+              <div>
+                <h2 className="section-title compact-title">Усі записи</h2>
+                <div className="small-muted compact-subtitle">
+                  Усі записи одним списком
+                </div>
+              </div>
+              <div className="small-muted compact-count">
+                Всього: {entries.length}
+              </div>
+            </div>
+
+            <div className="compact-list">
+              {entries
+                .slice()
+                .sort((a, b) => a.date.localeCompare(b.date) || a.name.localeCompare(b.name))
+                .map((entry) => (
+                  <div key={entry.id} className="compact-row">
+                    <div className="compact-main">
                       {editingId === entry.id ? (
-                        <>
+                        <div className="compact-edit-grid">
                           <input
-                            className="input"
+                            className="input compact-input"
                             value={editingForm.name}
                             onChange={(e) =>
                               setEditingForm((prev) => ({ ...prev, name: e.target.value }))
                             }
                             placeholder="Нове ім'я"
                           />
-                          <div className="space-12" />
                           <input
-                            className="input"
+                            className="input compact-input"
                             type="date"
                             value={editingForm.date}
                             onChange={(e) =>
                               setEditingForm((prev) => ({ ...prev, date: e.target.value }))
                             }
                           />
-                        </>
+                        </div>
                       ) : (
                         <>
-                          <div className="name-text" title={entry.name}>
+                          <div className="compact-name" title={entry.name}>
                             {entry.name}
                           </div>
-                          <div className="small-muted">{entry.date}</div>
+                          <div className="compact-date">{formatDisplayDate(entry.date)}</div>
                         </>
                       )}
                     </div>
 
-                    <div className="action-row">
+                    <div className="compact-actions">
                       {editingId === entry.id ? (
                         <>
                           <button
-                            className="button"
+                            className="button compact-button"
                             type="button"
                             onClick={() => handleSaveEdit(entry.id)}
                             disabled={saving}
@@ -647,7 +798,7 @@ export default function App() {
                             Зберегти
                           </button>
                           <button
-                            className="button"
+                            className="button compact-button"
                             type="button"
                             onClick={handleCancelEdit}
                             disabled={saving}
@@ -657,118 +808,27 @@ export default function App() {
                         </>
                       ) : (
                         <button
-                          className="button"
+                          className="button compact-button"
                           type="button"
                           onClick={() => handleStartEdit(entry)}
                           disabled={saving}
                         >
-                          Редагувати
+                          Ред.
                         </button>
                       )}
 
                       <button
-                        className="button"
+                        className="button compact-button compact-button--danger"
                         type="button"
                         onClick={() => handleDeleteEntry(entry.id)}
                         disabled={saving}
                       >
-                        Видалити
+                        Вид.
                       </button>
                     </div>
                   </div>
-                ))
-              ) : (
-                <div className="stat-box">На цей день ніхто не взяв day off.</div>
-              )
-            ) : (
-              <div className="stat-box">Клікни на дату в календарі, щоб побачити записи.</div>
-            )}
-          </div>
-
-          <div className="card">
-            <h2 className="section-title">Усі записи</h2>
-            <div className="small-muted mb-12">
-              Дані зберігаються в Supabase, оновлюються в realtime і доступні тільки після входу.
+                ))}
             </div>
-
-            {entries
-              .slice()
-              .sort((a, b) => a.date.localeCompare(b.date))
-              .map((entry) => (
-                <div key={entry.id} className="item-row">
-                  <div className="text-block">
-                    {editingId === entry.id ? (
-                      <>
-                        <input
-                          className="input"
-                          value={editingForm.name}
-                          onChange={(e) =>
-                            setEditingForm((prev) => ({ ...prev, name: e.target.value }))
-                          }
-                          placeholder="Нове ім'я"
-                        />
-                        <div className="space-12" />
-                        <input
-                          className="input"
-                          type="date"
-                          value={editingForm.date}
-                          onChange={(e) =>
-                            setEditingForm((prev) => ({ ...prev, date: e.target.value }))
-                          }
-                        />
-                      </>
-                    ) : (
-                      <>
-                        <div className="name-text" title={entry.name}>
-                          {entry.name}
-                        </div>
-                        <div className="small-muted">{entry.date}</div>
-                      </>
-                    )}
-                  </div>
-
-                  <div className="action-row">
-                    {editingId === entry.id ? (
-                      <>
-                        <button
-                          className="button"
-                          type="button"
-                          onClick={() => handleSaveEdit(entry.id)}
-                          disabled={saving}
-                        >
-                          Зберегти
-                        </button>
-                        <button
-                          className="button"
-                          type="button"
-                          onClick={handleCancelEdit}
-                          disabled={saving}
-                        >
-                          Скасувати
-                        </button>
-                      </>
-                    ) : (
-                      <button
-                        className="button"
-                        type="button"
-                        onClick={() => handleStartEdit(entry)}
-                        disabled={saving}
-                      >
-                        Редагувати
-                      </button>
-                    )}
-
-                    <button
-                      className="button"
-                      type="button"
-                      onClick={() => handleDeleteEntry(entry.id)}
-                      disabled={saving}
-                    >
-                      Видалити
-                    </button>
-                  </div>
-                </div>
-              ))}
           </div>
         </div>
       </div>
