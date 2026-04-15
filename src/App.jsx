@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "./supabase";
+import { DayPicker } from "react-day-picker";
+import "react-day-picker/dist/style.css";
 
 const monthNames = [
   "Січень",
@@ -42,13 +44,17 @@ function formatDateKey(date) {
   return `${year}-${month}-${day}`;
 }
 
+function getMonthKey(date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  return `${year}-${month}`;
+}
+
 function formatDisplayDate(dateString) {
   const [year, month, day] = dateString.split("-").map(Number);
   const date = new Date(year, month - 1, day);
-
   const monthName = monthNamesGenitive[month - 1];
   const weekDay = weekDaysShort[date.getDay()];
-
   return `${day} ${monthName} (${weekDay})`;
 }
 
@@ -97,23 +103,10 @@ function normalizeName(name) {
   return name.trim().replace(/\s+/g, " ").toLowerCase();
 }
 
-function getConflictMessage(entries, name, date, excludeId = null) {
-  const normalizedName = normalizeName(name);
-  const sameDateEntries = entries.filter((entry) => entry.date === date && entry.id !== excludeId);
-
-  const duplicatePerson = sameDateEntries.some(
-    (entry) => normalizeName(entry.name) === normalizedName
-  );
-
-  if (duplicatePerson) {
-    return "Ця людина вже має day off на цю дату.";
-  }
-
-  if (sameDateEntries.length >= MAX_PEOPLE_PER_DAY) {
-    return `На цю дату вже є максимум ${MAX_PEOPLE_PER_DAY} людини.`;
-  }
-
-  return "";
+function parseDateString(dateString) {
+  if (!dateString) return undefined;
+  const [year, month, day] = dateString.split("-").map(Number);
+  return new Date(year, month - 1, day);
 }
 
 function DayCard({ date, currentMonth, dayEntries, todayKey, onSelect }) {
@@ -135,8 +128,12 @@ function DayCard({ date, currentMonth, dayEntries, todayKey, onSelect }) {
       <div className="day-card__content">
         <div className="day-card__desktop">
           {dayEntries.slice(0, 2).map((entry) => (
-            <div key={`${entry.id}-${dateKey}`} className="day-chip" title={entry.name}>
-              {entry.name}
+            <div
+              key={`${entry.id}-${dateKey}`}
+              className="day-chip"
+              title={entry.member?.full_name || "Без імені"}
+            >
+              {entry.member?.full_name || "—"}
             </div>
           ))}
 
@@ -150,9 +147,9 @@ function DayCard({ date, currentMonth, dayEntries, todayKey, onSelect }) {
             <span
               key={`${entry.id}-${dateKey}-mobile`}
               className="mobile-initial"
-              title={entry.name}
+              title={entry.member?.full_name || "Без імені"}
             >
-              {getInitials(entry.name)}
+              {getInitials(entry.member?.full_name || "")}
             </span>
           ))}
         </div>
@@ -171,24 +168,143 @@ export default function App() {
   });
 
   const [currentMonth, setCurrentMonth] = useState(new Date());
+
+  const createCalendarRef = useRef(null);
+  const editCalendarRef = useRef(null);
+
+  const [teamMembers, setTeamMembers] = useState([]);
+  const [memberStatuses, setMemberStatuses] = useState([]);
   const [entries, setEntries] = useState([]);
+
   const [selectedDate, setSelectedDate] = useState(null);
-  const [form, setForm] = useState({ name: "", date: "" });
+
+  const [memberForm, setMemberForm] = useState({ fullName: "" });
+  const [bulkMembersText, setBulkMembersText] = useState("");
+
+  const [dayOffForm, setDayOffForm] = useState({
+    memberId: "",
+    date: "",
+  });
+
   const [editingId, setEditingId] = useState(null);
-  const [editingForm, setEditingForm] = useState({ name: "", date: "" });
+  const [editingForm, setEditingForm] = useState({
+    memberId: "",
+    date: "",
+  });
+
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
+
+  const [isCreateCalendarOpen, setIsCreateCalendarOpen] = useState(false);
+  const [openEditCalendarId, setOpenEditCalendarId] = useState(null);
+
   const flashTimerRef = useRef(null);
+
+  const currentMonthKey = useMemo(() => getMonthKey(currentMonth), [currentMonth]);
 
   const clearFlashMessage = () => {
     if (flashTimerRef.current) {
       clearTimeout(flashTimerRef.current);
     }
+
     flashTimerRef.current = setTimeout(() => {
       setSuccessMessage("");
     }, 2200);
+  };
+
+  const getStatusForMember = (memberId, monthKey = currentMonthKey) =>
+    memberStatuses.find(
+      (status) =>
+        String(status.member_id) === String(memberId) && status.month_key === monthKey
+    );
+
+  const isMemberExcludedForMonth = (memberId, monthKey = currentMonthKey) =>
+    Boolean(getStatusForMember(memberId, monthKey)?.is_excluded);
+
+  const getConflictMessage = (entriesList, memberId, date, excludeId = null) => {
+    const sameDateEntries = entriesList.filter(
+      (entry) => entry.date === date && entry.id !== excludeId
+    );
+
+    const duplicatePerson = sameDateEntries.some(
+      (entry) => String(entry.member_id) === String(memberId)
+    );
+
+    if (duplicatePerson) {
+      return "Ця людина вже має day off на цю дату.";
+    }
+
+    if (sameDateEntries.length >= MAX_PEOPLE_PER_DAY) {
+      return `На цю дату вже є максимум ${MAX_PEOPLE_PER_DAY} людини.`;
+    }
+
+    return "";
+  };
+
+  const loadTeamMembers = async () => {
+    const { data, error } = await supabase
+      .from("team_members")
+      .select("id, full_name, is_active, created_at")
+      .eq("is_active", true)
+      .order("full_name", { ascending: true });
+
+    if (error) {
+      setErrorMessage(error.message || "Не вдалося завантажити команду");
+      return;
+    }
+
+    setTeamMembers(data || []);
+  };
+
+  const loadMonthlyStatuses = async () => {
+    const { data, error } = await supabase
+      .from("monthly_member_status")
+      .select("id, member_id, month_key, is_excluded, note")
+      .eq("month_key", currentMonthKey);
+
+    if (error) {
+      setErrorMessage(error.message || "Не вдалося завантажити місячні статуси");
+      return;
+    }
+
+    setMemberStatuses(data || []);
+  };
+
+  const loadEntries = async () => {
+    if (!session) {
+      setEntries([]);
+      setLoading(false);
+      return;
+    }
+
+    setLoading(true);
+    setErrorMessage("");
+
+    const { data, error } = await supabase
+      .from("day_off_entries")
+      .select(`
+        id,
+        member_id,
+        date,
+        created_at,
+        member:team_members!day_off_entries_member_id_fkey (
+          id,
+          full_name
+        )
+      `)
+      .order("date", { ascending: true })
+      .order("created_at", { ascending: true });
+
+    if (error) {
+      setErrorMessage(error.message || "Не вдалося завантажити day off записи");
+      setEntries([]);
+    } else {
+      setEntries(data || []);
+    }
+
+    setLoading(false);
   };
 
   useEffect(() => {
@@ -215,48 +331,39 @@ export default function App() {
     };
   }, []);
 
-  const loadEntries = async () => {
-    if (!session) {
-      setEntries([]);
-      setLoading(false);
-      return;
-    }
-
-    setLoading(true);
-    setErrorMessage("");
-
-    const { data, error } = await supabase
-      .from("day_off_entries")
-      .select("id, name, date, created_at")
-      .order("date", { ascending: true })
-      .order("created_at", { ascending: true });
-
-    if (error) {
-      setErrorMessage(error.message || "Не вдалося завантажити дані");
-      setEntries([]);
-    } else {
-      setEntries(data || []);
-    }
-
-    setLoading(false);
-  };
-
   useEffect(() => {
+    if (!session) return;
+    loadTeamMembers();
     loadEntries();
   }, [session]);
+
+  useEffect(() => {
+    if (!session) return;
+    loadMonthlyStatuses();
+  }, [session, currentMonthKey]);
 
   useEffect(() => {
     if (!session) return undefined;
 
     const channel = supabase
-      .channel("day-off-realtime")
+      .channel("team-dayoff-realtime")
       .on(
         "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "day_off_entries",
-        },
+        { event: "*", schema: "public", table: "team_members" },
+        () => {
+          loadTeamMembers();
+        }
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "monthly_member_status" },
+        () => {
+          loadMonthlyStatuses();
+        }
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "day_off_entries" },
         () => {
           loadEntries();
         }
@@ -266,7 +373,7 @@ export default function App() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [session]);
+  }, [session, currentMonthKey]);
 
   const calendarDays = useMemo(() => getCalendarDays(currentMonth), [currentMonth]);
 
@@ -282,6 +389,10 @@ export default function App() {
   const selectedDayEntries = selectedDate ? eventsByDate[selectedDate] || [] : [];
   const todayKey = formatDateKey(new Date());
 
+  const availableMembersForCurrentMonth = useMemo(() => {
+    return teamMembers.filter((member) => !isMemberExcludedForMonth(member.id));
+  }, [teamMembers, memberStatuses, currentMonthKey]);
+
   const summary = useMemo(() => {
     const currentYear = currentMonth.getFullYear();
     const currentMonthIndex = currentMonth.getMonth();
@@ -293,12 +404,52 @@ export default function App() {
       const [year, month] = entry.date.split("-").map(Number);
       if (year === currentYear && month - 1 === currentMonthIndex) {
         totalBookedDays += 1;
-        people.add(entry.name);
+        if (entry.member?.full_name) {
+          people.add(normalizeName(entry.member.full_name));
+        }
       }
     });
 
     return { peopleCount: people.size, totalBookedDays };
   }, [entries, currentMonth]);
+
+  const membersWithDayOffThisMonth = useMemo(() => {
+    const set = new Set();
+
+    entries.forEach((entry) => {
+      if (entry.date.slice(0, 7) === currentMonthKey) {
+        set.add(String(entry.member_id));
+      }
+    });
+
+    return set;
+  }, [entries, currentMonthKey]);
+
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (
+        isCreateCalendarOpen &&
+        createCalendarRef.current &&
+        !createCalendarRef.current.contains(event.target)
+      ) {
+        setIsCreateCalendarOpen(false);
+      }
+
+      if (
+        openEditCalendarId !== null &&
+        editCalendarRef.current &&
+        !editCalendarRef.current.contains(event.target)
+      ) {
+        setOpenEditCalendarId(null);
+      }
+    };
+
+    document.addEventListener("mousedown", handleClickOutside);
+
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, [isCreateCalendarOpen, openEditCalendarId]);
 
   const handleLogin = async (e) => {
     e.preventDefault();
@@ -327,16 +478,187 @@ export default function App() {
     setSuccessMessage("");
     await supabase.auth.signOut();
     setEntries([]);
+    setTeamMembers([]);
+    setMemberStatuses([]);
     setSelectedDate(null);
     setEditingId(null);
-    setEditingForm({ name: "", date: "" });
+    setEditingForm({ memberId: "", date: "" });
+  };
+
+  const handleAddMember = async () => {
+    const fullName = memberForm.fullName.trim();
+    if (!fullName) return;
+
+    const duplicate = teamMembers.some(
+      (member) => normalizeName(member.full_name) === normalizeName(fullName)
+    );
+
+    if (duplicate) {
+      setErrorMessage("Така людина вже є в команді.");
+      return;
+    }
+
+    setSaving(true);
+    setErrorMessage("");
+
+    const { error } = await supabase.from("team_members").insert([
+      {
+        full_name: fullName,
+      },
+    ]);
+
+    if (error) {
+      setErrorMessage(error.message || "Не вдалося додати людину");
+      setSaving(false);
+      return;
+    }
+
+    setMemberForm({ fullName: "" });
+    setSuccessMessage("Людину додано");
+    clearFlashMessage();
+    setSaving(false);
+  };
+
+  const handleDeleteMember = async (member) => {
+    const confirmed = window.confirm(
+      `Видалити ${member.full_name} зі списку?\n\n` +
+      `Також будуть видалені всі її day off записи та місячні статуси.`
+    );
+
+    if (!confirmed) return;
+
+    setSaving(true);
+    setErrorMessage("");
+
+    const { error } = await supabase
+      .from("team_members")
+      .delete()
+      .eq("id", member.id);
+
+    if (error) {
+      setErrorMessage(error.message || "Не вдалося видалити людину");
+      setSaving(false);
+      return;
+    }
+
+    if (String(dayOffForm.memberId) === String(member.id)) {
+      setDayOffForm((prev) => ({ ...prev, memberId: "" }));
+    }
+
+    if (String(editingForm.memberId) === String(member.id)) {
+      setEditingId(null);
+      setOpenEditCalendarId(null);
+      setEditingForm({ memberId: "", date: "" });
+    }
+
+    setSuccessMessage("Людину видалено");
+    clearFlashMessage();
+    setSaving(false);
+  };
+
+  const handleBulkAddMembers = async () => {
+    const rows = bulkMembersText
+      .split("\n")
+      .map((item) => item.trim())
+      .filter(Boolean);
+
+    if (!rows.length) return;
+
+    const existingNames = new Set(teamMembers.map((member) => normalizeName(member.full_name)));
+    const dedupedRows = [];
+    const seen = new Set();
+
+    for (const row of rows) {
+      const normalized = normalizeName(row);
+      if (!normalized) continue;
+      if (existingNames.has(normalized)) continue;
+      if (seen.has(normalized)) continue;
+      seen.add(normalized);
+      dedupedRows.push({ full_name: row });
+    }
+
+    if (!dedupedRows.length) {
+      setErrorMessage("Усі люди з цього списку вже є в команді.");
+      return;
+    }
+
+    setSaving(true);
+    setErrorMessage("");
+
+    const { error } = await supabase.from("team_members").insert(dedupedRows);
+
+    if (error) {
+      setErrorMessage(error.message || "Не вдалося додати список людей");
+      setSaving(false);
+      return;
+    }
+
+    setBulkMembersText("");
+    setSuccessMessage("Список людей додано");
+    clearFlashMessage();
+    setSaving(false);
+  };
+
+  const handleToggleMemberExclusion = async (memberId) => {
+    const existing = getStatusForMember(memberId, currentMonthKey);
+
+    setSaving(true);
+    setErrorMessage("");
+
+    if (existing) {
+      const { error } = await supabase
+        .from("monthly_member_status")
+        .update({ is_excluded: !existing.is_excluded })
+        .eq("id", existing.id);
+
+      if (error) {
+        setErrorMessage(error.message || "Не вдалося оновити статус");
+        setSaving(false);
+        return;
+      }
+    } else {
+      const { error } = await supabase.from("monthly_member_status").insert([
+        {
+          member_id: memberId,
+          month_key: currentMonthKey,
+          is_excluded: true,
+        },
+      ]);
+
+      if (error) {
+        setErrorMessage(error.message || "Не вдалося створити статус");
+        setSaving(false);
+        return;
+      }
+    }
+
+    const editingThisMember = String(editingForm.memberId) === String(memberId);
+    const creatingThisMember = String(dayOffForm.memberId) === String(memberId);
+
+    if (editingThisMember && !selectedDayEntries.some((entry) => String(entry.member_id) === String(memberId))) {
+      setEditingForm((prev) => ({ ...prev, memberId: "" }));
+    }
+
+    if (creatingThisMember) {
+      setDayOffForm((prev) => ({ ...prev, memberId: "" }));
+    }
+
+    setSuccessMessage("Статус на місяць оновлено");
+    clearFlashMessage();
+    setSaving(false);
   };
 
   const handleAddEntry = async () => {
-    const trimmedName = form.name.trim();
-    if (!trimmedName || !form.date) return;
+    if (!dayOffForm.memberId || !dayOffForm.date) return;
 
-    const conflictMessage = getConflictMessage(entries, trimmedName, form.date);
+    const monthKey = dayOffForm.date.slice(0, 7);
+
+    if (isMemberExcludedForMonth(dayOffForm.memberId, monthKey)) {
+      setErrorMessage("Ця людина не бере участі в day off цього місяця.");
+      return;
+    }
+
+    const conflictMessage = getConflictMessage(entries, dayOffForm.memberId, dayOffForm.date);
     if (conflictMessage) {
       setErrorMessage(conflictMessage);
       return;
@@ -347,8 +669,8 @@ export default function App() {
 
     const { error } = await supabase.from("day_off_entries").insert([
       {
-        name: trimmedName,
-        date: form.date,
+        member_id: Number(dayOffForm.memberId),
+        date: dayOffForm.date,
       },
     ]);
 
@@ -358,7 +680,8 @@ export default function App() {
       return;
     }
 
-    setForm({ name: "", date: "" });
+    setDayOffForm({ memberId: "", date: "" });
+    setIsCreateCalendarOpen(false);
     setSuccessMessage("Запис додано");
     clearFlashMessage();
     setSaving(false);
@@ -378,7 +701,7 @@ export default function App() {
 
     if (editingId === id) {
       setEditingId(null);
-      setEditingForm({ name: "", date: "" });
+      setEditingForm({ memberId: "", date: "" });
     }
 
     setSuccessMessage("Запис видалено");
@@ -387,16 +710,32 @@ export default function App() {
   };
 
   const handleStartEdit = (entry) => {
+    setIsCreateCalendarOpen(false);
+    setOpenEditCalendarId(null);
     setEditingId(entry.id);
-    setEditingForm({ name: entry.name, date: entry.date });
+    setEditingForm({
+      memberId: String(entry.member_id),
+      date: entry.date,
+    });
     setErrorMessage("");
   };
 
   const handleSaveEdit = async (id) => {
-    const trimmedName = editingForm.name.trim();
-    if (!trimmedName || !editingForm.date) return;
+    if (!editingForm.memberId || !editingForm.date) return;
 
-    const conflictMessage = getConflictMessage(entries, trimmedName, editingForm.date, id);
+    const monthKey = editingForm.date.slice(0, 7);
+
+    if (isMemberExcludedForMonth(editingForm.memberId, monthKey)) {
+      setErrorMessage("Ця людина не бере участі в day off цього місяця.");
+      return;
+    }
+
+    const conflictMessage = getConflictMessage(
+      entries,
+      editingForm.memberId,
+      editingForm.date,
+      id
+    );
     if (conflictMessage) {
       setErrorMessage(conflictMessage);
       return;
@@ -407,7 +746,10 @@ export default function App() {
 
     const { error } = await supabase
       .from("day_off_entries")
-      .update({ name: trimmedName, date: editingForm.date })
+      .update({
+        member_id: Number(editingForm.memberId),
+        date: editingForm.date,
+      })
       .eq("id", id);
 
     if (error) {
@@ -417,7 +759,8 @@ export default function App() {
     }
 
     setEditingId(null);
-    setEditingForm({ name: "", date: "" });
+    setOpenEditCalendarId(null);
+    setEditingForm({ memberId: "", date: "" });
     setSuccessMessage("Запис оновлено");
     clearFlashMessage();
     setSaving(false);
@@ -425,30 +768,8 @@ export default function App() {
 
   const handleCancelEdit = () => {
     setEditingId(null);
-    setEditingForm({ name: "", date: "" });
-  };
-
-  const handleDeleteAll = async () => {
-    const confirmed = window.confirm("Видалити всі твої записи?");
-    if (!confirmed) return;
-
-    setSaving(true);
-    setErrorMessage("");
-
-    const { error } = await supabase.from("day_off_entries").delete().not("id", "is", null);
-
-    if (error) {
-      setErrorMessage(error.message || "Не вдалося очистити записи");
-      setSaving(false);
-      return;
-    }
-
-    setSelectedDate(null);
-    setEditingId(null);
-    setEditingForm({ name: "", date: "" });
-    setSuccessMessage("Усі записи видалено");
-    clearFlashMessage();
-    setSaving(false);
+    setOpenEditCalendarId(null);
+    setEditingForm({ memberId: "", date: "" });
   };
 
   if (authLoading) {
@@ -507,7 +828,7 @@ export default function App() {
         <div className="card">
           <div className="header-row">
             <div>
-              <div className="subtitle">Календар day off · private mode</div>
+              <div className="subtitle">Календар day off · team mode</div>
               <h1 className="title">
                 {monthNames[currentMonth.getMonth()]} {currentMonth.getFullYear()}
               </h1>
@@ -538,10 +859,6 @@ export default function App() {
                 Вперед →
               </button>
 
-              <button className="danger-button" type="button" onClick={handleDeleteAll} disabled={saving}>
-                Очистити все
-              </button>
-
               <button className="button" type="button" onClick={handleLogout}>
                 Вийти
               </button>
@@ -554,29 +871,66 @@ export default function App() {
 
           <div className="card card--inner">
             <div className="field">
-              <label className="label">Ім’я</label>
-              <input
+              <label className="label">Людина</label>
+              <select
                 className="input"
-                value={form.name}
-                onChange={(e) => setForm((prev) => ({ ...prev, name: e.target.value }))}
-                placeholder="Наприклад, Марина Шевченко"
-              />
+                value={dayOffForm.memberId}
+                onChange={(e) =>
+                  setDayOffForm((prev) => ({ ...prev, memberId: e.target.value }))
+                }
+              >
+                <option value="">Оберіть людину</option>
+                {availableMembersForCurrentMonth.map((member) => (
+                  <option key={member.id} value={member.id}>
+                    {member.full_name}
+                  </option>
+                ))}
+              </select>
             </div>
 
             <div className="field">
               <label className="label">Дата</label>
-              <input
-                className="input"
-                type="date"
-                value={form.date}
-                onChange={(e) => setForm((prev) => ({ ...prev, date: e.target.value }))}
-              />
+
+              <button
+                type="button"
+                className="input date-trigger"
+                onClick={() => setIsCreateCalendarOpen((prev) => !prev)}
+              >
+                {dayOffForm.date ? formatDisplayDate(dayOffForm.date) : "Обери дату"}
+              </button>
+
+              {isCreateCalendarOpen && (
+                <div className="calendar-popover" ref={createCalendarRef}>
+                  <DayPicker
+                    mode="single"
+                    selected={parseDateString(dayOffForm.date)}
+                    month={currentMonth}
+                    fromMonth={currentMonth}
+                    toMonth={currentMonth}
+                    onSelect={(date) => {
+                      if (!date) return;
+                      setDayOffForm((prev) => ({
+                        ...prev,
+                        date: formatDateKey(date),
+                      }));
+                      setIsCreateCalendarOpen(false);
+                    }}
+                  />
+                </div>
+              )}
             </div>
 
-            <div className="small-muted mb-12">Ліміт: максимум {MAX_PEOPLE_PER_DAY} людини на день.</div>
+            <div className="small-muted mb-12">
+              Ліміт: максимум {MAX_PEOPLE_PER_DAY} людини на день. Виключені цього місяця в список не потрапляють.
+            </div>
 
-            <button className="primary-button" type="button" onClick={handleAddEntry} disabled={saving}>
-              {saving ? "Збереження..." : "Додати day off"}
+            <button
+              className="primary-button"
+              type="button"
+              onClick={handleAddEntry}
+              disabled={saving}
+            >
+              {saving ? "Збереження..." : "Видати day off"}
             </button>
           </div>
 
@@ -611,18 +965,133 @@ export default function App() {
 
         <div className="side-stack">
           <div className="card">
-            <h2 className="section-title">Огляд місяця</h2>
+            <h2 className="section-title">Команда</h2>
 
-            <div className="stat-box">
-              <div className="small-muted">Людей із day off цього місяця</div>
-              <div className="stat-value">{summary.peopleCount}</div>
+            <div className="field">
+              <label className="label">Додати одну людину</label>
+              <div className="compact-edit-grid">
+                <input
+                  className="input"
+                  value={memberForm.fullName}
+                  onChange={(e) =>
+                    setMemberForm((prev) => ({ ...prev, fullName: e.target.value }))
+                  }
+                  placeholder="Ім'я Прізвище"
+                />
+                <button
+                  className="primary-button"
+                  type="button"
+                  onClick={handleAddMember}
+                  disabled={saving}
+                >
+                  Додати
+                </button>
+              </div>
             </div>
 
-            <div className="space-12" />
+            <div className="field">
+              <label className="label">Додати списком</label>
+              <textarea
+                className="input"
+                value={bulkMembersText}
+                onChange={(e) => setBulkMembersText(e.target.value)}
+                placeholder={"Іван Петренко\nМарина Шевченко\nОлег Коваль"}
+                rows={5}
+              />
+            </div>
 
-            <div className="stat-box">
-              <div className="small-muted">Заброньовано day off днів</div>
-              <div className="stat-value">{summary.totalBookedDays}</div>
+            <button
+              className="button"
+              type="button"
+              onClick={handleBulkAddMembers}
+              disabled={saving}
+            >
+              Додати список
+            </button>
+
+            <div className="space-16" />
+
+            <div className="compact-list-header">
+              <div>
+                <h2 className="section-title compact-title">Учасники місяця</h2>
+                <div className="small-muted compact-subtitle">
+                  Відмічай, хто не бере участі в {monthNamesGenitive[currentMonth.getMonth()]}
+                </div>
+              </div>
+              <div className="small-muted compact-count">Всього: {teamMembers.length}</div>
+            </div>
+
+            <div className="compact-list">
+              {teamMembers
+                .slice()
+                .sort((a, b) => {
+                  const aExcluded = isMemberExcludedForMonth(a.id);
+                  const bExcluded = isMemberExcludedForMonth(b.id);
+
+                  const aHasDayOff = membersWithDayOffThisMonth.has(String(a.id));
+                  const bHasDayOff = membersWithDayOffThisMonth.has(String(b.id));
+
+                  if (aExcluded !== bExcluded) return aExcluded ? 1 : -1;
+                  if (aHasDayOff !== bHasDayOff) return aHasDayOff ? 1 : -1;
+
+                  return a.full_name.localeCompare(b.full_name);
+                })
+                .map((member) => {
+                  const excluded = isMemberExcludedForMonth(member.id);
+                  const hasDayOffThisMonth = membersWithDayOffThisMonth.has(String(member.id));
+
+                  return (
+                    <div key={member.id} className="compact-row">
+                      <div className="compact-main">
+                        <div className="compact-name" title={member.full_name}>
+                          {member.full_name}
+                        </div>
+
+                        <div className="member-statuses">
+                          {!excluded && (
+                            <span
+                              className={`member-status-badge ${hasDayOffThisMonth
+                                ? "member-status-badge--done"
+                                : "member-status-badge--pending"
+                                }`}
+                            >
+                              {hasDayOffThisMonth ? "Взяв day off" : "Ще не взяв"}
+                            </span>
+                          )}
+
+                          <span
+                            className={`member-status-badge ${excluded
+                              ? "member-status-badge--excluded"
+                              : "member-status-badge--active"
+                              }`}
+                          >
+                            {excluded ? "Не бере участі" : "Актив"}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="compact-actions">
+                        <button
+                          className={`button compact-button ${excluded ? "compact-button--danger" : ""}`}
+                          type="button"
+                          onClick={() => handleToggleMemberExclusion(member.id)}
+                          disabled={saving}
+                        >
+                          {excluded ? "Повернути" : "Виключити"}
+                        </button>
+
+                        <button
+                          className="button compact-button compact-button--danger"
+                          type="button"
+                          onClick={() => handleDeleteMember(member)}
+                          disabled={saving}
+                        >
+                          Вид.
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
             </div>
           </div>
 
@@ -651,33 +1120,71 @@ export default function App() {
                 <div className="compact-list">
                   {selectedDayEntries
                     .slice()
-                    .sort((a, b) => a.name.localeCompare(b.name))
+                    .sort((a, b) =>
+                      (a.member?.full_name || "").localeCompare(b.member?.full_name || "")
+                    )
                     .map((entry) => (
                       <div key={entry.id} className="compact-row">
                         <div className="compact-main">
                           {editingId === entry.id ? (
                             <div className="compact-edit-grid">
-                              <input
+                              <select
                                 className="input compact-input"
-                                value={editingForm.name}
+                                value={editingForm.memberId}
                                 onChange={(e) =>
-                                  setEditingForm((prev) => ({ ...prev, name: e.target.value }))
+                                  setEditingForm((prev) => ({
+                                    ...prev,
+                                    memberId: e.target.value,
+                                  }))
                                 }
-                                placeholder="Нове ім'я"
-                              />
-                              <input
-                                className="input compact-input"
-                                type="date"
-                                value={editingForm.date}
-                                onChange={(e) =>
-                                  setEditingForm((prev) => ({ ...prev, date: e.target.value }))
-                                }
-                              />
+                              >
+                                <option value="">Оберіть людину</option>
+                                {availableMembersForCurrentMonth.map((member) => (
+                                  <option key={member.id} value={member.id}>
+                                    {member.full_name}
+                                  </option>
+                                ))}
+                              </select>
+
+                              <div className="edit-date-picker">
+                                <button
+                                  type="button"
+                                  className="input compact-input date-trigger"
+                                  onClick={() =>
+                                    setOpenEditCalendarId((prev) => (prev === entry.id ? null : entry.id))
+                                  }
+                                >
+                                  {editingForm.date ? formatDisplayDate(editingForm.date) : "Обери дату"}
+                                </button>
+
+                                {openEditCalendarId === entry.id && (
+                                  <div className="calendar-popover calendar-popover--floating" ref={editCalendarRef}>
+                                    <DayPicker
+                                      mode="single"
+                                      selected={parseDateString(editingForm.date)}
+                                      month={currentMonth}
+                                      fromMonth={currentMonth}
+                                      toMonth={currentMonth}
+                                      onSelect={(date) => {
+                                        if (!date) return;
+                                        setEditingForm((prev) => ({
+                                          ...prev,
+                                          date: formatDateKey(date),
+                                        }));
+                                        setOpenEditCalendarId(null);
+                                      }}
+                                    />
+                                  </div>
+                                )}
+                              </div>
                             </div>
                           ) : (
                             <>
-                              <div className="compact-name" title={entry.name}>
-                                {entry.name}
+                              <div
+                                className="compact-name"
+                                title={entry.member?.full_name || "Без імені"}
+                              >
+                                {entry.member?.full_name || "—"}
                               </div>
                               <div className="compact-date">
                                 {formatDisplayDate(entry.date)}
@@ -742,46 +1249,86 @@ export default function App() {
               <div>
                 <h2 className="section-title compact-title">Усі записи</h2>
                 <div className="small-muted compact-subtitle">
-                  Усі записи одним списком
+                  Усі day off одним списком
                 </div>
               </div>
-              <div className="small-muted compact-count">
-                Всього: {entries.length}
-              </div>
+              <div className="small-muted compact-count">Всього: {entries.length}</div>
             </div>
 
             <div className="compact-list">
               {entries
                 .slice()
-                .sort((a, b) => a.date.localeCompare(b.date) || a.name.localeCompare(b.name))
+                .sort((a, b) => {
+                  const byDate = a.date.localeCompare(b.date);
+                  if (byDate !== 0) return byDate;
+                  return (a.member?.full_name || "").localeCompare(b.member?.full_name || "");
+                })
                 .map((entry) => (
                   <div key={entry.id} className="compact-row">
                     <div className="compact-main">
                       {editingId === entry.id ? (
                         <div className="compact-edit-grid">
-                          <input
+                          <select
                             className="input compact-input"
-                            value={editingForm.name}
+                            value={editingForm.memberId}
                             onChange={(e) =>
-                              setEditingForm((prev) => ({ ...prev, name: e.target.value }))
+                              setEditingForm((prev) => ({
+                                ...prev,
+                                memberId: e.target.value,
+                              }))
                             }
-                            placeholder="Нове ім'я"
-                          />
-                          <input
-                            className="input compact-input"
-                            type="date"
-                            value={editingForm.date}
-                            onChange={(e) =>
-                              setEditingForm((prev) => ({ ...prev, date: e.target.value }))
-                            }
-                          />
+                          >
+                            <option value="">Оберіть людину</option>
+                            {availableMembersForCurrentMonth.map((member) => (
+                              <option key={member.id} value={member.id}>
+                                {member.full_name}
+                              </option>
+                            ))}
+                          </select>
+
+                          <div className="edit-date-picker">
+                            <button
+                              type="button"
+                              className="input compact-input date-trigger"
+                              onClick={() =>
+                                setOpenEditCalendarId((prev) => (prev === entry.id ? null : entry.id))
+                              }
+                            >
+                              {editingForm.date ? formatDisplayDate(editingForm.date) : "Обери дату"}
+                            </button>
+
+                            {openEditCalendarId === entry.id && (
+                              <div className="calendar-popover calendar-popover--floating" ref={editCalendarRef}>
+                                <DayPicker
+                                  mode="single"
+                                  selected={parseDateString(editingForm.date)}
+                                  month={currentMonth}
+                                  fromMonth={currentMonth}
+                                  toMonth={currentMonth}
+                                  onSelect={(date) => {
+                                    if (!date) return;
+                                    setEditingForm((prev) => ({
+                                      ...prev,
+                                      date: formatDateKey(date),
+                                    }));
+                                    setOpenEditCalendarId(null);
+                                  }}
+                                />
+                              </div>
+                            )}
+                          </div>
                         </div>
                       ) : (
                         <>
-                          <div className="compact-name" title={entry.name}>
-                            {entry.name}
+                          <div
+                            className="compact-name"
+                            title={entry.member?.full_name || "Без імені"}
+                          >
+                            {entry.member?.full_name || "—"}
                           </div>
-                          <div className="compact-date">{formatDisplayDate(entry.date)}</div>
+                          <div className="compact-date">
+                            {formatDisplayDate(entry.date)}
+                          </div>
                         </>
                       )}
                     </div>

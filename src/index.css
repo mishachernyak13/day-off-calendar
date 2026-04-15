@@ -305,6 +305,7 @@ input {
 }
 
 .side-stack {
+  width: 110%;
   display: grid;
   gap: 24px;
   min-width: 0;
@@ -452,8 +453,6 @@ input {
   margin-top: 8px;
 }
 
-/* compact lists */
-
 .compact-list-header {
   display: flex;
   align-items: flex-start;
@@ -526,7 +525,7 @@ input {
 }
 
 .compact-button {
-  min-height: 30px;
+  min-height: 25px;
   padding: 5px 8px;
   font-size: 12px;
   border-radius: 10px;
@@ -553,6 +552,153 @@ input {
   min-height: 34px;
   padding: 6px 10px;
   font-size: 13px;
+}
+
+
+.member-statuses {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  justify-content: flex-end;
+}
+
+.member-status-badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  line-height: 1;
+  border: 1px solid transparent;
+  white-space: nowrap;
+}
+
+.member-status-badge--done {
+  background: rgba(37, 99, 235, 0.16);
+  color: #93c5fd;
+  border-color: rgba(59, 130, 246, 0.22);
+}
+
+.member-status-badge--pending {
+  background: rgba(245, 158, 11, 0.14);
+  color: #fcd34d;
+  border-color: rgba(245, 158, 11, 0.22);
+}
+
+.member-status-badge--active {
+  background: rgba(22, 163, 74, 0.14);
+  color: #86efac;
+  border-color: rgba(34, 197, 94, 0.22);
+}
+
+.member-status-badge--excluded {
+  background: rgba(185, 28, 28, 0.14);
+  color: #fca5a5;
+  border-color: rgba(239, 68, 68, 0.22);
+}
+
+.date-trigger {
+  width: auto;
+  min-width: 100px;
+  max-width: 240px;
+
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+
+  padding: 8px 12px;
+  border-radius: 12px;
+
+  font-size: 14px;
+  background: #111827;
+  border: 1px solid #334155;
+  color: #e5e7eb;
+}
+
+.calendar-popover {
+  margin-top: 10px;
+  padding: 12px;
+  background: #18212f;
+  border: 1px solid #334155;
+  border-radius: 16px;
+  box-shadow: 0 18px 44px rgba(0, 0, 0, 0.28);
+  width: fit-content;
+  max-width: 100%;
+}
+
+.edit-date-picker {
+  position: relative;
+  width: 100%;
+}
+
+.calendar-popover--floating {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  z-index: 30;
+  min-width: 320px;
+  max-width: min(92vw, 360px);
+}
+
+.rdp {
+  --rdp-cell-size: 38px;
+  --rdp-accent-color: #3b82f6;
+  --rdp-background-color: rgba(59, 130, 246, 0.18);
+  --rdp-accent-color-dark: #60a5fa;
+  --rdp-background-color-dark: rgba(96, 165, 250, 0.2);
+  --rdp-outline: 2px solid #3b82f6;
+  --rdp-outline-selected: 2px solid #60a5fa;
+  margin: 0;
+  color: #e5e7eb;
+}
+
+.rdp-months {
+  justify-content: center;
+}
+
+.rdp-month {
+  background: transparent;
+}
+
+.rdp-caption_label {
+  color: #f3f4f6;
+  font-weight: 700;
+}
+
+.rdp-nav_button {
+  color: #cbd5e1;
+  border-radius: 10px;
+}
+
+.rdp-head_cell {
+  color: #94a3b8;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.rdp-day {
+  color: #e5e7eb;
+  border-radius: 10px;
+}
+
+.rdp-day:hover {
+  background: #243041;
+}
+
+.rdp-day_selected,
+.rdp-day_selected:focus-visible,
+.rdp-day_selected:hover {
+  background: #2563eb;
+  color: white;
+}
+
+.rdp-day_today {
+  border: 1px solid #60a5fa;
+}
+
+.rdp-day_outside {
+  color: #64748b;
 }
 
 @media (max-width: 959px) {
@@ -671,6 +817,20 @@ input {
 
   .compact-actions {
     justify-content: flex-start;
+  }
+
+  .member-statuses {
+    justify-content: flex-start;
+  }
+
+  .member-status-badge {
+    font-size: 10px;
+    min-height: 22px;
+    padding: 3px 7px;
+  }
+
+  .side-stack {
+    width: 100%;
   }
 }
 
@@ -823,6 +983,43 @@ input {
   .compact-edit-grid {
     grid-template-columns: 1fr;
   }
+
+  .member-statuses {
+    justify-content: flex-start;
+  }
+
+  .member-status-badge {
+    font-size: 10px;
+    min-height: 22px;
+    padding: 3px 7px;
+  }
+
+  .calendar-popover {
+    margin-top: 10px;
+    padding: 12px;
+    background: #18212f;
+    border: 1px solid #334155;
+    border-radius: 16px;
+    box-shadow: 0 18px 44px rgba(0, 0, 0, 0.28);
+    width: fit-content;
+    max-width: 100%;
+  }
+
+  .rdp {
+    --rdp-cell-size: 34px;
+    font-size: 13px;
+  }
+
+  .calendar-popover--floating {
+    left: 0;
+    right: auto;
+    min-width: 280px;
+    max-width: min(92vw, 320px);
+  }
+
+  .side-stack {
+    width: 100%;
+  }
 }
 
 @media (max-width: 420px) {
@@ -891,5 +1088,19 @@ input {
 
   .compact-date {
     font-size: 10px;
+  }
+
+  .member-statuses {
+    justify-content: flex-start;
+  }
+
+  .member-status-badge {
+    font-size: 10px;
+    min-height: 22px;
+    padding: 3px 7px;
+  }
+
+  .side-stack {
+    width: 100%;
   }
 }
