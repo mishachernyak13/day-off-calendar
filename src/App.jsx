@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "./supabase";
 import { DayPicker } from "react-day-picker";
+import { uk } from "react-day-picker/locale";
 import "react-day-picker/dist/style.css";
 
 const monthNames = [
@@ -901,7 +902,7 @@ export default function App() {
 
               {isCreateCalendarOpen && (
                 <div className="calendar-popover" ref={createCalendarRef}>
-                  <DayPicker
+                  <DayPicker locale={uk}
                     mode="single"
                     selected={parseDateString(dayOffForm.date)}
                     month={currentMonth}
@@ -1159,7 +1160,7 @@ export default function App() {
 
                                 {openEditCalendarId === entry.id && (
                                   <div className="calendar-popover calendar-popover--floating" ref={editCalendarRef}>
-                                    <DayPicker
+                                    <DayPicker locale={uk}
                                       mode="single"
                                       selected={parseDateString(editingForm.date)}
                                       month={currentMonth}
@@ -1299,7 +1300,7 @@ export default function App() {
 
                             {openEditCalendarId === entry.id && (
                               <div className="calendar-popover calendar-popover--floating" ref={editCalendarRef}>
-                                <DayPicker
+                                <DayPicker locale={uk}
                                   mode="single"
                                   selected={parseDateString(editingForm.date)}
                                   month={currentMonth}
